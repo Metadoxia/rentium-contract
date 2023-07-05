@@ -15,10 +15,10 @@ A Solidity contract for renting out ERC721 tokens for a set period of time. This
 * Allows NFT owners to set a rental fee and a deposit for each rental
 
 # Diagrams
-* Leasor perspective flow chart:
+## Leasor perspective flow chart:
 ![leasorSide](https://github.com/Metadoxia/rentium-contract/assets/73427323/fe72d261-9f6d-4a67-a2f5-2c311b57fd74)
 
-* Owner perspective flow chart:
+## Owner perspective flow chart:
 ![ownerSide](https://github.com/Metadoxia/rentium-contract/assets/73427323/da6f83c8-e35f-48bc-9ac0-52f5514bda35)
 
 
