@@ -1,110 +1,125 @@
-// SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol"; // import IERC721Enumerable
-import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract NFTRenting is ERC721Holder, ReentrancyGuard {
-    address public owner = msg.sender;
-    struct Rental {
-        address renter;
-        uint256 startBlock;
-        uint256 endBlock;
-        uint256 deposit;
-        uint256 price;
-        bool active;
+contract NFTRentingContract {
+    address private owner;
+    mapping(uint256 => NFT) private nfts;
+
+    struct NFT {
+        address owner;
+        address leasor;
+        uint256 tokenId;
+        uint256 rentalPrice;
+        uint256 leasorReturnPrice;
+        uint256 securityDeposit;
+        uint256 rentDuration;
+        uint256 rentStartTime;
     }
 
-    IERC721Enumerable public nft; // use IERC721Enumerable instead of IERC721
-    uint256 public rentalPeriod;
-    uint256 public rentalFee;
-
-    mapping(uint256 => Rental) public rentals;
-
-    event NFTRentingCreated(
-        uint256 indexed tokenId,
-        address indexed owner,
-        uint256 rentalPeriod,
-        uint256 rentalFee,
-        uint256 deposit
-    );
-
-    event NFTRented(
-        uint256 indexed tokenId,
-        address indexed renter,
-        uint256 startBlock,
-        uint256 endBlock,
-        uint256 deposit
-    );
-
-    event NFTReturned(
-        uint256 indexed tokenId,
-        address indexed renter,
-        uint256 endBlock,
-        uint256 price
-    );
-
-    constructor(IERC721Enumerable _nft, uint256 _rentalPeriod, uint256 _rentalFee) { // use IERC721Enumerable instead of IERC721
-        nft = _nft;
-        rentalPeriod = _rentalPeriod;
-        rentalFee = _rentalFee;
+    constructor() {
+        owner = msg.sender;
     }
 
-    function createRental(
-        uint256 tokenId,
-        uint256 deposit
-    ) external {
-        require(nft.ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
-        require(deposit > 0, "Deposit must be greater than 0");
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only contract owner can call this function.");
+        _;
+    }
 
-        rentals[tokenId] = Rental({
-            renter: address(0),
-            startBlock: 0,
-            endBlock: 0,
-            deposit: deposit,
-            price: rentalFee,
-            active: false
+    function transferNFT(address _nftContract, uint256 _tokenId) public onlyOwner {
+        IERC721 nft = IERC721(_nftContract);
+        nft.transferFrom(msg.sender, address(this), _tokenId);
+        nfts[_tokenId] = NFT({
+            owner: msg.sender,
+            leasor: address(0),
+            tokenId: _tokenId,
+            leasorReturnPrice: 0,
+            rentalPrice: 0,
+            securityDeposit: 0,
+            rentDuration: 0,
+            rentStartTime: 0
         });
-
-        emit NFTRentingCreated(tokenId, msg.sender, rentalPeriod, rentalFee, deposit);
     }
 
-    function rentNFT(uint256 tokenId) external payable nonReentrant {
-        Rental storage rental = rentals[tokenId];
-        require(rental.active == false, "NFT is already rented");
-        require(nft.ownerOf(tokenId) == address(this), "NFT is not in the contract's custody");
-        require(msg.value == rental.deposit, "Deposit amount incorrect");
-
-        rental.active = true;
-        rental.renter = msg.sender;
-        rental.startBlock = block.number;
-        rental.endBlock = block.number + rentalPeriod;
-
-        nft.safeTransferFrom(address(this), msg.sender, tokenId);
-
-        emit NFTRented(tokenId, msg.sender, rental.startBlock, rental.endBlock, rental.deposit);
+    function setRentalPrice(uint256 _tokenId, uint256 _price) public onlyOwner {
+        require(nfts[_tokenId].owner != address(0), "NFT does not exist.");
+        nfts[_tokenId].rentalPrice = _price;
     }
 
-    function returnNFT(uint256 tokenId) external nonReentrant {
-    Rental storage rental = rentals[tokenId];
-    require(rental.active == true, "NFT is not rented");
-    require(rental.renter == msg.sender, "Only renter can return the NFT");
-    require(block.number >= rental.endBlock, "Rental period is not over yet");
-
-    rental.active = false;
-    uint256 price = rental.price;
-    uint256 refund = rental.deposit - price;
-
-    if (refund > 0) {
-        payable(msg.sender).transfer(refund);
+    function setRentalTerms(
+        uint256 _tokenId,
+        uint256 _securityDeposit,
+        uint256 _rentDuration
+    ) public onlyOwner {
+        require(nfts[_tokenId].owner != address(0), "NFT does not exist.");
+        nfts[_tokenId].securityDeposit = _securityDeposit;
+        nfts[_tokenId].rentDuration = _rentDuration;
     }
 
-    nft.safeTransferFrom(address(this), rental.renter, tokenId); // transfer the NFT back to the renter
+    function rentNFT(uint256 _tokenId) public payable {
+        require(nfts[_tokenId].owner != address(0), "NFT does not exist.");
+        require(nfts[_tokenId].leasor == address(0), "NFT is already rented.");
+        require(msg.value == nfts[_tokenId].securityDeposit, "Insufficient/More security deposit.");
 
-    emit NFTReturned(tokenId, rental.renter, rental.endBlock, price);
+        nfts[_tokenId].leasor = msg.sender;
+        nfts[_tokenId].rentStartTime = block.timestamp;
+
+        // Transfer the security deposit to the contract
+        payable(address(this)).transfer(msg.value);
     }
 
+    function returnNFT(uint256 _tokenId) public {
+        require(nfts[_tokenId].owner == msg.sender || nfts[_tokenId].leasor == msg.sender, "You are not the owner or current leasor.");
+        require(nfts[_tokenId].rentStartTime > 0, "NFT is not currently rented.");
+        require(block.timestamp >= nfts[_tokenId].rentStartTime + nfts[_tokenId].rentDuration, "Rent period has not expired yet.");
+
+        address currentOwner = nfts[_tokenId].owner;
+        nfts[_tokenId].leasor = address(0);
+        nfts[_tokenId].rentStartTime = 0;
+
+        // Transfer the NFT back to the original owner
+        IERC721 nft = IERC721(nfts[_tokenId].owner);
+        nft.transferFrom(address(this), currentOwner, _tokenId);
+
+        // If the NFT is returned on time, transfer the rental price to the owner
+        if (msg.sender == nfts[_tokenId].leasor) {
+
+            nfts[_tokenId].leasorReturnPrice = nfts[_tokenId].securityDeposit - nfts[_tokenId].rentalPrice;
+
+            payable(nfts[_tokenId].owner).transfer(nfts[_tokenId].rentalPrice);
+            payable(nfts[_tokenId].leasor).transfer(nfts[_tokenId].leasorReturnPrice);
+        } else {
+            // If the NFT is not returned, transfer the security deposit to the owner
+            payable(nfts[_tokenId].owner).transfer(nfts[_tokenId].securityDeposit);
+        }
+    }
+
+    function getNFTOwner(uint256 _tokenId) public view returns (address) {
+        return nfts[_tokenId].owner;
+    }
+
+    function getNFTLeasor(uint256 _tokenId) public view returns (address) {
+        return nfts[_tokenId].leasor;
+    }
+
+    function getRentalPrice(uint256 _tokenId) public view returns (uint256) {
+        return nfts[_tokenId].rentalPrice;
+    }
+
+    function getRentalTerms(uint256 _tokenId)
+        public
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return (
+            nfts[_tokenId].securityDeposit,
+            nfts[_tokenId].rentDuration,
+            nfts[_tokenId].rentStartTime
+        );
+    }
 }
+ 
