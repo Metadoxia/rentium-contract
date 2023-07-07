@@ -16,10 +16,12 @@ A Solidity contract for renting out ERC721 tokens for a set period of time. This
 
 # Diagrams
 ## Leasor perspective flow chart:
-![leasorSide](https://github.com/Metadoxia/rentium-contract/assets/73427323/fe72d261-9f6d-4a67-a2f5-2c311b57fd74)
+![renterSide](https://github.com/Metadoxia/rentium-contract/assets/73427323/45b8361d-c0cc-4924-9536-74c3c0916948)
+
 
 ## Owner perspective flow chart:
-![ownerSide](https://github.com/Metadoxia/rentium-contract/assets/73427323/da6f83c8-e35f-48bc-9ac0-52f5514bda35)
+![ownerSide](https://github.com/Metadoxia/rentium-contract/assets/73427323/f6d2f173-b619-4b04-abae-0d5402fc9b8b)
+
 
 
 
